@@ -15,6 +15,10 @@ const hapiUserSchema = new Mongoose.Schema({
     type: String,
     required: true,
   },
+  userId: {
+    type: String,
+    required: true,
+  }
 });
 
 hapiUserSchema.plugin(timeStamps);

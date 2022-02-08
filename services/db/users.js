@@ -1,5 +1,7 @@
 const User = require('./../../model/user');
 const sendEmail = require('./../../utils/email');
+const Counter =  require('./../../model/counter');
+const moment = require('moment');
 
 module.exports = function UsersServices() {
 
@@ -23,23 +25,62 @@ module.exports = function UsersServices() {
               error: 'USER_EXISTS'
             });
           } else {
-            const instance = new User(data);
-            instance.save((saveErr, newUser) => {
-              if (saveErr) {
+            Counter.findOneAndUpdate({type:'UserId'},{$inc: { count: +1 }}, async (dbErr,dbRes) => {
+              if (dbErr) {
                 reject({
-                  message: 'Error in saving User in database',
+                  message: 'Error in Counter Model',
                   code: 403,
-                  error: 'ERROR_DB_SAVE',
+                  error: 'ERROR_FINDING_TYPE',
                 });
               } else {
-                resolve({
-                  value: newUser,
-                  code: 400,
-                  message: 'Created Successfully',
-                });
+                if (!dbRes) {
+                  const obj = {
+                    type: 'UserId',
+                    count: 1,
+                  }
+                  const counter = new Counter(obj);
+                  counter.save(async (sErr, count) => {
+                    if (sErr) {
+                      reject({
+                        message: 'Error in creating new Counter',
+                        code: 403,
+                        error: 'ERROR_DB_SAVE',
+                      });
+                    } else {
+                      data.userId= moment().format('YYYY')+'-'+count.count;
+                      const response = await saveUserDetails(data);
+                      resolve(response);
+                    }
+                  })
+                } else {
+                  data.userId = moment().format('YYYY')+'-'+(dbRes.count+1);
+                  const response = await saveUserDetails(data);
+                  resolve(response)
+                }
               }
             });
           }
+        }
+      });
+    });
+  }
+
+  function saveUserDetails(data) {
+    return new Promise((resolve,reject) => {
+      const instance = new User(data);
+      instance.save((saveErr, newUser) => {
+        if (saveErr) {
+          reject({
+            message: 'Error in saving User in database',
+            code: 403,
+            error: 'ERROR_DB_SAVE',
+          });
+        } else {
+          resolve({
+            value: newUser,
+            code: 400,
+            message: 'Created Successfully',
+          });
         }
       });
     });
@@ -59,7 +100,7 @@ module.exports = function UsersServices() {
           });
         } else {
           console.log(data);
-          const link = `http://${process.env.UI_HOST}:${process.env.UI_PORT}/resetPassword`;
+          const link = `http://${process.env.UI_HOST}:${process.env.UI_PORT}/resetPassword/${dbRes[0].userId}`;
           const emailData = {
             to: dbRes[0].email,
             subject: 'Reset Qproducts Account Password',
@@ -80,8 +121,48 @@ module.exports = function UsersServices() {
     });
   }
 
+  function getUserDetailsById(data) {
+    return new Promise((resolve,reject) => {
+      User.findOne({userId: data.id},(dbErr,dbRes) => {
+        if (dbErr) {
+          reject({
+            message: 'Error in findng user by Id',
+            code: 403,
+            error: 'ERROR_FINDING_USER',
+          });
+        } else {
+          resolve({
+            value: dbRes,
+            message: 'Finding User Successfully',
+          });
+        }
+      })
+    })
+  }
+
+  function updateUserDetails(data) {
+    return new Promise((resolve,reject) => {
+      User.findOneAndUpdate({userId: data.id}, data.updateData, (dbErr,dbRes) => {
+        if (dbErr) {
+          reject({
+            message: 'Error in findng user by Id',
+            code: 403,
+            error: 'ERROR_FINDING_USER',
+          });
+        } else {
+          resolve({
+            value: dbRes,
+            message: 'Updated Successfully',
+          });
+        }
+      })
+    })
+  }
+
   return {
     createUserServices,
     getUserDetailsByMail,
+    getUserDetailsById,
+    updateUserDetails,
   };
 };
